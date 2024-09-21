@@ -1,4 +1,4 @@
-FROM golang:1.22.5 as builder
+FROM --platform=${BUILDPLATFORM} golang:1.22.5 as builder
 
 WORKDIR /app
 
@@ -6,15 +6,17 @@ COPY . .
 
 RUN go mod download && go mod verify
 
-RUN go test ./...
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /app/cert-manager-sync cmd/cert-manager-sync/*.go
 
-RUN CGO_ENABLED=0 go build -o /app/cert-manager-sync cmd/cert-manager-sync/*.go
-
-FROM alpine:3.6 as alpine
+FROM --platform=${BUILDPLATFORM} alpine:3.6 as alpine
 
 RUN apk add -U --no-cache ca-certificates
 
-FROM scratch as app
+FROM --platform=${TARGETPLATFORM} scratch as app
 
 WORKDIR /app
 

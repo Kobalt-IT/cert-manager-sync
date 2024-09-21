@@ -1,0 +1,52 @@
+name: Publish
+
+on:
+    push:
+        branches: [main]
+
+concurrency: publish-${{ github.ref }}
+
+permissions:
+    id-token: write
+    contents: read
+
+jobs:
+    image:
+        runs-on: [self-hosted, linux, ARM64]
+        outputs:
+            matrix: ${{ steps.matrix.outputs.value }}
+        steps:
+            - uses: actions/checkout@v3
+            - uses: docker/setup-qemu-action@v2
+            - uses: docker/setup-buildx-action@v2
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v2
+              with:
+                  role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-publish-image-public
+                  aws-region: us-east-1
+
+            - name: Login to Amazon ECR
+              uses: aws-actions/amazon-ecr-login@v2
+              with:
+                registry-type: public
+
+            - name: Extract metadata (tags, labels) for Docker
+              id: meta
+              uses: docker/metadata-action@v4
+              with:
+                  images: public.ecr.aws/h2h5s8h9/kobalt/cert-manager-sync
+                  tags: |
+                    type=sha,prefix=sha-,format=short,priority=101
+                    type=ref,event=branch,priority=100
+
+            - name: Build and push Docker image
+              uses: docker/build-push-action@v4
+              with:
+                  context: .
+                  push: true
+                  platforms: linux/amd64,linux/arm64
+                  tags: ${{ steps.meta.outputs.tags }}
+                  labels: ${{ steps.meta.outputs.labels }}
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
